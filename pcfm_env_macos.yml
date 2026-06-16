@@ -1,0 +1,41 @@
+name: pcfm
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - pytorch::pytorch
+  - pytorch::torchvision
+  - pytorch::torchaudio
+  - pip:
+    - lightning==2.4.0
+    - pytorch-lightning==2.4.0
+    - torchmetrics==1.4.2
+    - wandb==0.18.3
+    - h5py==3.12.1
+    - matplotlib==3.4.3
+    - scipy==1.14.1
+    - pandas==2.2.3
+    - einops==0.8.0
+    - tensorboard==2.18.0
+    - pyyaml
+    - tqdm
+    - neuraloperator==0.3.0
+    - scikit-learn==1.5.2
+    - scikit-optimize==0.10.2
+    - tensorly==0.8.1
+    - torch_harmonics==0.7.2
+    - torchdiffeq==0.2.4
+    - transformers==4.45.2
+    - tokenizers==0.20.0
+    - safetensors==0.4.5
+    - easydict==1.13
+    - black==24.8.0
+    - pytest==8.3.3
+    - plotly==5.24.1
+    - proplot==0.9.7
+    - ipykernel==6.29.5
+    - Markdown==3.7
+    - absl-py==2.1.0
