@@ -1,0 +1,13 @@
+# Datasets are reproduced via experiments/generate_data.py, not committed
+*.h5
+
+# Trained checkpoints (large); regenerate via the training scripts
+weights/*.pt
+
+# Vendored PCFM repo: keep the code, but ignore its runtime outputs
+external/PCFM-main/logs/
+external/PCFM-main/datasets/data/*.h5
+
+# Python caches
+__pycache__/
+*.pyc

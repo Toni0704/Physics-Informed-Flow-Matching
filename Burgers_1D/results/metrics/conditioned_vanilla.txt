@@ -1,0 +1,16 @@
+=== Vanilla (Unconstrained) Sampling Metrics ===
+ Sample  Data MSE  Data NRMSE (%)  Phys MSE  Phys L2   IC MSE  IC NRMSE (%)   BC MSE  BC NRMSE (%)
+      1  0.000013          0.3650  0.000012 0.077654 0.000140        1.1817 0.000039        0.7138
+      2  0.000010          0.3177  0.000012 0.077252 0.000161        1.2685 0.000020        0.5848
+      3  0.000007          0.2660  0.000006 0.055527 0.000094        0.9715 0.000022        1.0979
+      4  0.000017          0.4064  0.000004 0.044878 0.000052        0.7185 0.000050        3.1228
+
+=== Mean Metrics Across Samples (Vanilla) ===
+  Data MSE            : 1.175125e-05
+  Data NRMSE (%)      : 3.387750e-01
+  Phys MSE            : 8.633997e-06
+  Phys L2             : 6.382782e-02
+  IC MSE              : 1.116369e-04
+  IC NRMSE (%)        : 1.035050e+00
+  BC MSE              : 3.258580e-05
+  BC NRMSE (%)        : 1.379825e+00
