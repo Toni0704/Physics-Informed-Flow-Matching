@@ -1,0 +1,48 @@
+# ============================================================================
+# Standard scientific & machine learning
+# ============================================================================
+torch>=2.0.0
+numpy
+h5py
+matplotlib
+pandas
+tqdm
+
+# ============================================================================
+# Neural operator & architecture dependencies
+# (versions matched to the Kaggle environment the models were trained in)
+# ============================================================================
+neuraloperator==0.3.0
+torchdiffeq==0.2.4
+easydict==1.13
+einops==0.8.0
+gpytorch
+tensorly
+torch-harmonics          # pulled in by neuraloperator's spectral conv import
+tensorboard              # PCFM's scripts/training/main.py uses SummaryWriter
+
+# PCFM's config loader (scripts/training/utils.load_config) uses PyYAML + EasyDict.
+# (ruamel.yaml is NOT required by the loader; pyyaml is the one actually imported.)
+pyyaml
+
+# ============================================================================
+# Conflict-free gradient updates (used only by train_pbfm.py)
+# ============================================================================
+# ConFIG IS on PyPI — install normally (no editable clone needed):
+conflictfree
+# alternative: pip install git+https://github.com/tum-pbs/ConFIG
+
+# ============================================================================
+# PCFM (Physics-Constrained Flow Matching) — NOT a pip package
+# ============================================================================
+# The PCFM repository has no setup.py / pyproject.toml, so `pip install -e` does
+# NOT work. Instead, make it importable in one of two ways:
+#
+#   (recommended) vendor it inside this dataset directory:
+#       Burgers_1D/external/PCFM-main/
+#
+#   (or) point an environment variable at a clone anywhere on disk:
+#       export PCFM_REPO_PATH=/path/to/PCFM-main
+#
+# src/__init__.py:add_pcfm_to_path() resolves either location automatically.
+# Source: https://github.com/cpfpengfei/PCFM
