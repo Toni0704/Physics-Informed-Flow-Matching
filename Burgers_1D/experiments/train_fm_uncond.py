@@ -62,9 +62,9 @@ def main():
             mode="w", suffix=".yml", delete=False, dir=str(pcfm / "configs"))
         yaml.safe_dump(cfg, tmp_cfg)
         tmp_cfg.close()
-        config_path = os.path.basename(tmp_cfg.name)
+        config_path = os.path.join("configs", os.path.basename(tmp_cfg.name))
         print(f"[train_fm_uncond] batch_size overridden to {args.batch_size} "
-              f"(temp config: configs/{config_path})")
+              f"(temp config: {config_path})")
 
     # Run PCFM's own training, from inside the repo with PYTHONPATH set to it.
     logdir = Path(args.logdir) if args.logdir else pcfm / "logs"
