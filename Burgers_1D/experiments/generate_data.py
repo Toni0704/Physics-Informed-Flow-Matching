@@ -24,6 +24,7 @@ Run from anywhere:
 
 import argparse
 import ast
+import shutil
 import sys
 from pathlib import Path
 
@@ -114,6 +115,17 @@ def main():
     print("[generate] done:",
           out_dir / "burgers_train_nIC80_nBC80.h5", "and",
           out_dir / "burgers_test_nIC30_nBC30.h5")
+
+    # On Kaggle, out_dir lives under the ephemeral session filesystem and is wiped
+    # on restart; mirror the .h5 files into /kaggle/working so they survive and
+    # can be copied back instead of re-running generation next session.
+    kaggle_working = Path("/kaggle/working")
+    if kaggle_working.is_dir():
+        persist_dir = kaggle_working / "burgers_data"
+        persist_dir.mkdir(parents=True, exist_ok=True)
+        for h5_path in out_dir.glob("burgers_*.h5"):
+            shutil.copy2(h5_path, persist_dir / h5_path.name)
+        print(f"[generate] also copied to persistent {persist_dir} (survives session restart)")
 
 
 if __name__ == "__main__":
