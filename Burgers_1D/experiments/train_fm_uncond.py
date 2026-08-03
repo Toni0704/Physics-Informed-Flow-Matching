@@ -20,7 +20,10 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src import add_pcfm_to_path
@@ -36,6 +39,9 @@ def main():
                         "so progress survives a session restart")
     p.add_argument("--resume", default=None,
                    help="path to a latest.pt / <step>.pt to resume training from")
+    p.add_argument("--batch-size", type=int, default=None,
+                   help="override configs/burgers1d.yml's train.batch_size (e.g. lower "
+                        "this on GPUs with less than ~16GB to avoid CUDA OOM)")
     args = p.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -47,10 +53,23 @@ def main():
         raise FileNotFoundError(
             f"{train_h5} not found. Run `python experiments/generate_data.py` first.")
 
+    config_path = "configs/burgers1d.yml"
+    if args.batch_size is not None:
+        with open(pcfm / "configs" / "burgers1d.yml") as f:
+            cfg = yaml.safe_load(f)
+        cfg["train"]["batch_size"] = args.batch_size
+        tmp_cfg = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yml", delete=False, dir=str(pcfm / "configs"))
+        yaml.safe_dump(cfg, tmp_cfg)
+        tmp_cfg.close()
+        config_path = os.path.basename(tmp_cfg.name)
+        print(f"[train_fm_uncond] batch_size overridden to {args.batch_size} "
+              f"(temp config: configs/{config_path})")
+
     # Run PCFM's own training, from inside the repo with PYTHONPATH set to it.
     logdir = Path(args.logdir) if args.logdir else pcfm / "logs"
     env = dict(os.environ, PYTHONPATH=str(pcfm))
-    cmd = ["python", "scripts/training/main.py", "configs/burgers1d.yml",
+    cmd = ["python", "scripts/training/main.py", config_path,
            "--mode", "train", "--logdir", str(logdir), "--savename", "burgers_uncond"]
     if args.resume:
         cmd += ["--resume", args.resume]
