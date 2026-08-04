@@ -1,0 +1,50 @@
+# Unconditioned FFM pretraining for 2D Navier-Stokes via scripts/training/main.py
+# (single-GPU custom loop; the lightning multi-GPU variant is configs/ns_lightning.yml).
+# Used by NS_2D/experiments/train_fm_uncond.py, which overrides dataset paths /
+# batch size at launch for the Kaggle environment.
+train:
+  seed: 42
+  max_iter: 20000
+  batch_size: 8          # sized for a 16GB T4; ns_lightning.yml's 24 assumes larger GPUs
+  log_freq: 50
+  val_freq: 200
+  save_freq: 2000
+  max_grad_norm: 10.0
+  valid_max_batch: 8
+  optimizer:
+    type: adamw
+    lr: 3.e-4
+    weight_decay: 0.0
+    beta1: 0.9
+    beta2: 0.999
+  scheduler:
+    type: plateau
+    factor: 0.8
+    patience: 10
+    min_lr: 3.e-5
+
+datasets:
+  type: ns
+  root: datasets/data
+  train:
+    data_file: ns_nw50_nf50_s64_t50_mu0.001.h5
+  test:
+    data_file: ns_nw10_nf100_s64_t50_mu0.001.h5
+
+model:
+  kernel: randn
+
+encoder:
+  type: fno
+  n_modes: [16, 16, 16]
+  emb_channels: 16
+  hidden_channels: 32
+  proj_channels: 256
+
+n_sample: 2
+n_eval: 1
+sample_dims: [64, 64, 50]  # nx, ny, nt
+
+vis:
+  vmin: -2.5
+  vmax: 2.5

@@ -27,6 +27,14 @@ class Burgers1DDataset(Dataset):
             self.file = h5py.File(self.path, 'r')
             self.u = self.file['u']
 
+    def __getstate__(self):
+        # Drop the h5py handle when pickling (spawn-based DataLoader workers
+        # pickle the dataset); each worker reopens lazily via _ensure_open.
+        state = self.__dict__.copy()
+        state['file'] = None
+        state.pop('u', None)
+        return state
+
     def __del__(self):
         if self.file is not None:
             self.file.close()
