@@ -181,6 +181,7 @@ def pcfm_sample(
 
     for _ in range(newtonsteps):
         res = hfunc(u_corr)
+        res_norm = res.norm().item()
         J = compute_jacobian(hfunc, u_corr)
         JJt = J @ J.T
         rhs = res
@@ -194,7 +195,22 @@ def pcfm_sample(
             JJt + eps * torch.eye(JJt.shape[0], device=u_flat.device),
             rhs
         )
-        u_corr = u_corr - J.T @ lam
+        u_new = u_corr - J.T @ lam
+
+        # torch.linalg.solve on a near-singular JJt (eps=1e-6 is a thin
+        # Tikhonov regularizer) can produce a huge lam and overshoot badly in
+        # a single step -- the result stays finite (so isfinite alone won't
+        # catch it) but can be many orders of magnitude off. Require the step
+        # to actually reduce the constraint residual; if it doesn't (or goes
+        # non-finite), keep the pre-step state and stop iterating rather than
+        # injecting a diverged value into the ODE trajectory, where it would
+        # corrupt every subsequent timestep's Jacobian too.
+        if not torch.isfinite(u_new).all():
+            break
+        new_res_norm = hfunc(u_new).norm().item()
+        if not math.isfinite(new_res_norm) or new_res_norm > res_norm * 10 + 1e-6:
+            break
+        u_corr = u_new
 
     # --------------------------------------------------
     # interpolation
