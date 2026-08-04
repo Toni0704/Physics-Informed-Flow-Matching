@@ -345,12 +345,15 @@ def main():
                    choices=["all", "pure_pcfm", "cond_pcfm", "cond_vanilla", "cond_pbfm"])
     p.add_argument("--num-samples", type=int, default=2)
     p.add_argument("--n-step", type=int, default=50)
-    p.add_argument("--interp", default="increasing", choices=list(INTERP_PRESETS),
-                   help="pure_pcfm's guided-interpolation lambda schedule: 'increasing' "
-                        "(recommended -- ramps 1e-2->1e0 over flow time, matches "
-                        "run_pcfm_hpc.py's tuned NS setup), 'fixed' (flat lam=1e0, "
-                        "over-constrains early and can hurt quality), 'none' (bypass "
-                        "interpolation, exact Newton-only IC+mass projection)")
+    p.add_argument("--interp", default="none", choices=list(INTERP_PRESETS),
+                   help="pure_pcfm's guided-interpolation lambda schedule. Default 'none' "
+                        "(recommended): the IC+mass residual is LINEAR in u, so the "
+                        "Newton/least-squares projection alone is already exact -- no need "
+                        "for the interpolation smoothing. 'increasing'/'fixed' route through "
+                        "relaxed_penalty_constraint_interp_linear_detached's fixed-step "
+                        "gradient descent, which is numerically fragile at NS's problem size "
+                        "(observed diverging to 1e9-1e23 on a real trained checkpoint) -- a "
+                        "divergence guard was added, but 'none' avoids the mechanism entirely")
     p.add_argument("--data-test",
                    default=str(REPO_ROOT / "datasets" / "data" / "ns_nw10_nf100_s64_t50_mu0.001.h5"))
     p.add_argument("--ckpt-uncond", default=None, help="override weights/best_fm_uncond.pt")

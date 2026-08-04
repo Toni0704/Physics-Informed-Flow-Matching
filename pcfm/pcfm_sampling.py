@@ -1,5 +1,6 @@
 # Key algorithms for Physics-Constrained Flow Matching (PCFM)
 
+import math
 import torch
 from torch.func import vmap, jacrev
 import gc
@@ -127,15 +128,29 @@ def relaxed_penalty_constraint_interp_linear_detached(
         return hat_u.detach()
     
     u = hat_u.detach().clone().requires_grad_(True)
+    best_u, best_loss = u.detach().clone(), float('inf')
 
     for _ in range(num_steps):
         u_ext = u + gamma * v_flat
         penalty = hfunc(u_ext).pow(2).sum()
         loss = (u - hat_u).pow(2).sum() + lam * penalty
+        loss_val = loss.item()
+
+        # This is plain fixed-step gradient descent with no line search; for
+        # ill-conditioned constraints (e.g. NS's mass residual, whose Jacobian
+        # rows are highly correlated across ~thousands of spatial cells) it can
+        # diverge geometrically rather than converge. Track the best-seen
+        # iterate and bail out on divergence instead of returning garbage.
+        if not math.isfinite(loss_val) or loss_val > best_loss * 10:
+            break
+        if loss_val < best_loss:
+            best_loss = loss_val
+            best_u = u.detach().clone()
+
         grad = torch.autograd.grad(loss, u)[0]
         u = (u - step_size * grad).detach().clone().requires_grad_(True)
 
-    return u.detach()
+    return best_u
 
 
 # 
