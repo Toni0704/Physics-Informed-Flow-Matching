@@ -312,9 +312,19 @@ def main():
     p.add_argument("--ckpt-uncond", default=None, help="override weights/best_fm_uncond.pt")
     p.add_argument("--ckpt-cond", default=None, help="override weights/best_fm_conditioned.pt")
     p.add_argument("--ckpt-pbfm", default=None, help="override weights/best_pbfm.pt")
+    p.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"],
+                   help="'cpu' forces off-GPU evaluation -- use this to run evaluate.py "
+                        "in a second terminal alongside training without competing for "
+                        "GPU memory (the PCFM Jacobian alone is a few GB at this problem "
+                        "size, on top of whatever the training process already holds)")
     args = p.parse_args()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.device == "cpu":
+        device = torch.device("cpu")
+    elif args.device == "cuda":
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     MET_DIR.mkdir(parents=True, exist_ok=True)
 
