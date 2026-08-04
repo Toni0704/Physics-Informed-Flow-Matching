@@ -185,6 +185,13 @@ def pcfm_sample(
     ut1 = u_flat + (1.0 - t) * v_flat
     u_corr = ut1.clone()
 
+    if _DEBUG_GUARDS:
+        print(f"[pcfm_sample TRACE] t={float(t):.3f}  "
+              f"u_flat.norm={u_flat.norm().item():.3e}  "
+              f"v_flat.norm={v_flat.norm().item():.3e}  "
+              f"ut1.norm={ut1.norm().item():.3e}  "
+              f"u0_flat.norm={u0_flat.norm().item():.3e}")
+
     # Stable reference scale for sanity-checking corrections: u0_flat is the
     # ORIGINAL noise seed for the whole trajectory, passed through unchanged
     # by the outer ODE loop (never reassigned) -- unlike u_flat/ut1, which is
