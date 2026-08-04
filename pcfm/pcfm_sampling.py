@@ -1,10 +1,13 @@
 # Key algorithms for Physics-Constrained Flow Matching (PCFM)
 
 import math
+import os
 import torch
 from torch.func import vmap, jacrev
 import gc
 from typing import Callable, Sequence
+
+_DEBUG_GUARDS = bool(os.environ.get("PCFM_DEBUG_GUARDS"))
 
 def compute_jacobian(fn: Callable[[torch.Tensor], torch.Tensor], inputs: torch.Tensor) -> torch.Tensor:
     def fn_flat(x: torch.Tensor) -> torch.Tensor:
@@ -142,6 +145,9 @@ def relaxed_penalty_constraint_interp_linear_detached(
         # diverge geometrically rather than converge. Track the best-seen
         # iterate and bail out on divergence instead of returning garbage.
         if not math.isfinite(loss_val) or loss_val > best_loss * 10:
+            if _DEBUG_GUARDS:
+                print(f"[relaxed_penalty_interp] guard tripped: "
+                      f"loss {best_loss:.3e} -> {loss_val:.3e}; bailing to best-seen iterate")
             break
         if loss_val < best_loss:
             best_loss = loss_val
@@ -179,6 +185,17 @@ def pcfm_sample(
     ut1 = u_flat + (1.0 - t) * v_flat
     u_corr = ut1.clone()
 
+    # Stable reference scale for sanity-checking corrections: u0_flat is the
+    # ORIGINAL noise seed for the whole trajectory, passed through unchanged
+    # by the outer ODE loop (never reassigned) -- unlike u_flat/ut1, which is
+    # this timestep's running state and can itself have already drifted from
+    # earlier steps. Deliberately NOT max()'d with ut1.norm(): if a prior step
+    # let contamination through, ut1 is already inflated, and folding it into
+    # the reference would raise the threshold along with the contamination
+    # instead of catching it -- anchoring on u0_flat ALONE is what makes this
+    # guard resistant to gradual multi-step drift, not just single-step blowup.
+    ref_scale = max(u0_flat.norm().item(), 1e-8)
+
     for _ in range(newtonsteps):
         res = hfunc(u_corr)
         res_norm = res.norm().item()
@@ -200,15 +217,30 @@ def pcfm_sample(
         # torch.linalg.solve on a near-singular JJt (eps=1e-6 is a thin
         # Tikhonov regularizer) can produce a huge lam and overshoot badly in
         # a single step -- the result stays finite (so isfinite alone won't
-        # catch it) but can be many orders of magnitude off. Require the step
-        # to actually reduce the constraint residual; if it doesn't (or goes
-        # non-finite), keep the pre-step state and stop iterating rather than
-        # injecting a diverged value into the ODE trajectory, where it would
+        # catch it) but can be many orders of magnitude off. The constraint
+        # is underdetermined (far fewer residual dims than state dims), so a
+        # near-singular JJt can also land on a numerically "valid"
+        # least-squares solution whose norm is enormous even though hfunc's
+        # reported residual looks fine -- the residual check below isn't
+        # sufficient by itself, hence the absolute-magnitude check first.
+        # Require the step to actually reduce the constraint residual AND
+        # stay within a generous multiple of the trajectory's own scale; if
+        # either fails, keep the pre-step state and stop iterating rather
+        # than injecting a diverged value into the ODE trajectory, where it would
         # corrupt every subsequent timestep's Jacobian too.
-        if not torch.isfinite(u_new).all():
+        new_norm = u_new.norm().item()
+        if not torch.isfinite(u_new).all() or new_norm > 50 * ref_scale:
+            if _DEBUG_GUARDS:
+                print(f"[pcfm_sample] MAGNITUDE guard tripped @ t={float(t):.3f}: "
+                      f"new_norm={new_norm:.3e} vs 50*ref_scale={50*ref_scale:.3e} "
+                      f"(ref_scale={ref_scale:.3e}); reverting this Newton step")
             break
         new_res_norm = hfunc(u_new).norm().item()
         if not math.isfinite(new_res_norm) or new_res_norm > res_norm * 10 + 1e-6:
+            if _DEBUG_GUARDS:
+                print(f"[pcfm_sample] RESIDUAL guard tripped @ t={float(t):.3f}: "
+                      f"res_norm {res_norm:.3e} -> {new_res_norm:.3e}; "
+                      f"reverting this Newton step")
             break
         u_corr = u_new
 
