@@ -59,6 +59,35 @@ VISC = 1e-3
 FRAME_DT = 1.0
 
 
+def _lambda_schedule_increasing(t):
+    """Ramp 1e-2 -> ~1e0 over flow time t in [0,1] (same schedule PCFM's own
+    scripts/training/run_pcfm_hpc.py uses for NS). Guided interpolation with a
+    FLAT lam=1e0 from t=0 (pure noise, no coherent structure yet) over-
+    constrains early in the trajectory and can distort the rest of the
+    sample; ramping it in avoids that."""
+    return 1e-2 * torch.exp(torch.tensor(5.0 * t)).item()
+
+
+# Presets for the guided-interpolation step used inside pcfm_sample's Newton
+# correction. 'increasing' matches run_pcfm_hpc.py's tuned NS setup and
+# should be the default choice; 'fixed' is the naive flat-lambda behavior
+# (what pure_pcfm used before this fix, whenever no interpolation_params
+# were supplied at all); 'none' bypasses interpolation entirely -- the IC+
+# mass residual is LINEAR in u, so the Newton/least-squares projection alone
+# is already exact, and this isolates whether the interpolation smoothing
+# itself is what hurts quality.
+INTERP_PRESETS = {
+    "increasing": dict(guided_interpolation=True, interpolation_params={
+        "custom_lam": 1e-2, "step_size": 1e-2, "num_steps": 20,
+        "lambda_schedule": _lambda_schedule_increasing,
+    }),
+    "fixed": dict(guided_interpolation=True, interpolation_params={
+        "custom_lam": 1e0, "step_size": 1e-2, "num_steps": 20,
+    }),
+    "none": dict(guided_interpolation=False, interpolation_params={}),
+}
+
+
 # --------------------------------------------------------------------------- #
 # Metrics / plotting
 # --------------------------------------------------------------------------- #
@@ -245,7 +274,8 @@ def run_pure_pcfm(args, device):
         u0 = model.gp.sample(grid, (H, W, n_t), n_samples=1).to(device)
         u_van = sampler.vanilla_sample(u0, n_step=args.n_step)
         u_pcfm = sampler.pcfm_sample(u0=u0, n_step=args.n_step, hfunc=res.full_residual_ns,
-                                     mode="least_squares", newtonsteps=1)
+                                     mode="least_squares", newtonsteps=1,
+                                     **INTERP_PRESETS[args.interp])
         w_van_list.append(u_van[0].permute(2, 0, 1))   # back to (T,H,W)
         w_pcfm_list.append(u_pcfm[0].permute(2, 0, 1))
 
@@ -254,8 +284,10 @@ def run_pure_pcfm(args, device):
     w_van = torch.stack(w_van_list).cpu().numpy()
     w_pcfm = torch.stack(w_pcfm_list).cpu().numpy()
 
-    for w_pred, title, stem in [(w_van, "Vanilla (unconstrained)", "pure_pcfm_vanilla"),
-                                (w_pcfm, "PCFM (IC+mass projection)", "pure_pcfm")]:
+    for w_pred, title, stem in [
+        (w_van, "Vanilla (unconstrained)", "pure_pcfm_vanilla"),
+        (w_pcfm, f"PCFM (IC+mass projection, interp={args.interp})", f"pure_pcfm_{args.interp}"),
+    ]:
         df = rich_metrics(w_pred, w_gt_np, f_np, device)
         write_rich(df, title, MET_DIR / f"{stem}.txt")
         save_triptych(w_gt_np, w_pred, FIG_DIR / f"{stem}.png", title)
@@ -313,6 +345,12 @@ def main():
                    choices=["all", "pure_pcfm", "cond_pcfm", "cond_vanilla", "cond_pbfm"])
     p.add_argument("--num-samples", type=int, default=2)
     p.add_argument("--n-step", type=int, default=50)
+    p.add_argument("--interp", default="increasing", choices=list(INTERP_PRESETS),
+                   help="pure_pcfm's guided-interpolation lambda schedule: 'increasing' "
+                        "(recommended -- ramps 1e-2->1e0 over flow time, matches "
+                        "run_pcfm_hpc.py's tuned NS setup), 'fixed' (flat lam=1e0, "
+                        "over-constrains early and can hurt quality), 'none' (bypass "
+                        "interpolation, exact Newton-only IC+mass projection)")
     p.add_argument("--data-test",
                    default=str(REPO_ROOT / "datasets" / "data" / "ns_nw10_nf100_s64_t50_mu0.001.h5"))
     p.add_argument("--ckpt-uncond", default=None, help="override weights/best_fm_uncond.pt")
