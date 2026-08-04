@@ -195,6 +195,7 @@ def pcfm_sample(
             custom_lam = 1e0
             step_size = 1e-2
             num_steps = 20
+            lambda_schedule = None
 
         ut_interp = relaxed_penalty_constraint_interp_linear_detached(
             u0=u0_flat,
