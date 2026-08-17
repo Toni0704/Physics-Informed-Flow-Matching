@@ -344,7 +344,11 @@ def main():
     p.add_argument("--technique", default="all",
                    choices=["all", "pure_pcfm", "cond_pcfm", "cond_vanilla", "cond_pbfm"])
     p.add_argument("--num-samples", type=int, default=2)
-    p.add_argument("--n-step", type=int, default=50)
+    p.add_argument("--n-step", type=int, default=200,
+                   help="Euler/PCFM sampling steps. Paper's Appendix H uses 200 for "
+                        "Navier-Stokes (100 for the simpler heat problem) -- fewer steps "
+                        "makes the per-step Newton correction ill-conditioned and can "
+                        "diverge to NaN/astronomical values.")
     p.add_argument("--interp", default="none", choices=list(INTERP_PRESETS),
                    help="pure_pcfm's guided-interpolation lambda schedule. Default 'none' "
                         "(recommended): the IC+mass residual is LINEAR in u, so the "

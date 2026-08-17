@@ -3,8 +3,8 @@
 
 import io
 
+import numpy as np
 import torch
-from torchvision.transforms import ToTensor
 from PIL import Image
 from matplotlib import pyplot as plt
 
@@ -12,11 +12,16 @@ plt.switch_backend('agg')
 
 
 def plt2tensor(fig):
+    # Manual PIL->tensor conversion (matches torchvision.transforms.ToTensor's
+    # HWC uint8 [0,255] -> CHW float [0,1] behavior) to avoid a hard torchvision
+    # dependency, whose CUDA-build version tends to drift out of sync with
+    # torch on Kaggle's frequently-updated preinstalled images.
     buf = io.BytesIO()
     fig.savefig(buf, format='jpg')
     buf.seek(0)
-    image = Image.open(buf)
-    image = ToTensor()(image)
+    image = Image.open(buf).convert('RGB')
+    arr = np.array(image, dtype=np.float32) / 255.0
+    image = torch.from_numpy(arr).permute(2, 0, 1)
     plt.close()
     return image
 
