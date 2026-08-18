@@ -29,8 +29,7 @@ datasets:
     data_file: darcy3d_test_n500.h5
 
 model:
-  kernel_length: 0.001
-  kernel_variance: 1.0
+  kernel: randn
 
 encoder:
   type: fno
