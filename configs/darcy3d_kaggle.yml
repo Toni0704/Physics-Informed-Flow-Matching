@@ -1,0 +1,49 @@
+# for pretraining FFM model for the steady-state 3D Darcy flow dataset (Kaggle GPU run)
+train:
+  seed: 42
+  max_iter: 20000
+  batch_size: 32
+  log_freq: 50
+  val_freq: 200
+  save_freq: 2000
+  max_grad_norm: 100.0
+  valid_max_batch: 32
+  optimizer:
+    type: adam
+    lr: 3.e-4
+    weight_decay: 0.0
+    beta1: 0.9
+    beta2: 0.999
+  scheduler:
+    type: plateau
+    factor: 0.5
+    patience: 10
+    min_lr: 1.e-4
+
+datasets:
+  type: darcy3d
+  root: /kaggle/input/datasets/rishabhj74/darcy3d
+  train:
+    data_file: darcy3d_train_n5000.h5
+  test:
+    data_file: darcy3d_test_n500.h5
+
+model:
+  kernel_length: 0.001
+  kernel_variance: 1.0
+
+encoder:
+  type: fno
+  n_modes: [8, 8, 8]
+  emb_channels: 32
+  hidden_channels: 32
+  proj_channels: 128
+  n_layers: 4
+
+n_sample: 2
+n_eval: 1
+sample_dims: [16, 16, 16]
+
+vis:
+  vmin: -1.5
+  vmax: 1.5

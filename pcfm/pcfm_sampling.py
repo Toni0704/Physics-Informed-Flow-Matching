@@ -350,3 +350,35 @@ def pcfm_2d_batched(ut, vf, t, u0, dt, hfunc, mode='root', newtonsteps=1, guided
     v_proj_flat = torch.stack(v_proj_list, dim=0)
     return v_proj_flat.view(B, nx, ny, nt)
 
+
+def pcfm_3d_batched(ut, vf, t, u0, dt, hfunc, mode='root', newtonsteps=1, guided_interpolation=True, interpolation_params={}, eps=1e-6):
+    """
+    Batched PCFM projection for pure-3D-space problems (nx, ny, nz), e.g.
+    steady-state Darcy flow -- no time axis, unlike pcfm_batched/pcfm_2d_batched.
+    """
+    B, nx, ny, nz = ut.shape
+    n = nx * ny * nz
+
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    def wrapped_project(u_flat, v_flat, u0_flat):
+        return pcfm_sample(
+            u_flat, v_flat, t, u0_flat, dt,
+            hfunc=hfunc, mode=mode, newtonsteps=newtonsteps,
+            guided_interpolation=guided_interpolation,
+            interpolation_params=interpolation_params,
+            eps=eps
+        )
+
+    u_flat = ut.view(B, n).detach().clone().requires_grad_(True)
+    v_flat = vf.view(B, n)
+    u0_flat = u0.view(B, n)
+
+    v_proj_list = []
+    for i in range(u_flat.shape[0]):
+        v_proj = wrapped_project(u_flat[i], v_flat[i], u0_flat[i])
+        v_proj_list.append(v_proj)
+    v_proj_flat = torch.stack(v_proj_list, dim=0)
+    return v_proj_flat.view(B, nx, ny, nz)
+

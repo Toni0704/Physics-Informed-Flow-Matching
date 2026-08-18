@@ -4,7 +4,7 @@ import gc
 import torch
 from tqdm import tqdm
 from torchdiffeq import odeint
-from .pcfm_sampling import make_grid, pcfm_batched, pcfm_2d_batched
+from .pcfm_sampling import make_grid, pcfm_batched, pcfm_2d_batched, pcfm_3d_batched
 
 
 class FFM_sampler:
@@ -227,10 +227,10 @@ class FFM_NS_sampler:
         mask = mask.to(device)
         grid = make_grid(u1_true.size()[1:], device)
 
-        noise = torch.randn_like(u1_true) # randn for NS 
+        noise = torch.randn_like(u1_true) # randn for NS
         noise.requires_grad_(True)
         ts = torch.linspace(0, 1, n_step + 1, device=device)
-        
+
         def default_loss_fn(u_pred, u_true, mask):
             return ((u_pred - u_true) * mask).square().sum()
         loss_fn = loss_fn or default_loss_fn
@@ -239,7 +239,7 @@ class FFM_NS_sampler:
             print("DFlow sampling...")
             tspan = torch.tensor([0, 1.], device=device)
             u = odeint(self.model, u, tspan, method="euler", options = {"step_size":ts[1]-ts[0]})[-1]
-            return u 
+            return u
 
         def closure():
             gc.collect()
@@ -256,4 +256,39 @@ class FFM_NS_sampler:
         with torch.no_grad():
             u_final = euler_ffm(noise)
         return u_final.detach()
+
+
+class FFM_Darcy3D_sampler:
+    """
+    Collection of samplers using a pretrained functional flow matching model
+    for steady-state 3D Darcy flow (nx, ny, nz), i.e. no time axis.
+    """
+    def __init__(self, model):
+        self.model = model
+
+    def pcfm_sample(self, u0, n_step, hfunc, mode='root', newtonsteps=1, eps=1e-6,
+                    guided_interpolation=True, interpolation_params={}):
+        dt = 1.0 / n_step
+        u = u0.clone()
+        ts = torch.linspace(0, 1, n_step + 1, device=u0.device)[:-1]
+        for t in tqdm(ts, desc="PCFM sampling"):
+            vf = self.model(t, u)
+            v_proj = pcfm_3d_batched(
+                ut=u, vf=vf, t=t, u0=u0, dt=dt,
+                hfunc=hfunc, mode=mode, newtonsteps=newtonsteps,
+                guided_interpolation=guided_interpolation,
+                interpolation_params=interpolation_params,
+                eps=eps
+            )
+            u = u + dt * v_proj
+        return u.detach()
+
+    @torch.no_grad()
+    def vanilla_sample(self, u0, n_step):
+        dt = 1.0 / n_step
+        u = u0.clone()
+        for t in tqdm(torch.linspace(0, 1, n_step + 1, device=u0.device)[:-1], desc="Vanilla"):
+            vf = self.model(t, u)
+            u = u + dt * vf
+        return u.detach()
 

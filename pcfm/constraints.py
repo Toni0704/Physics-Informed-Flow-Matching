@@ -179,3 +179,75 @@ class Residuals2D:
         Combined residual for Navier-Stokes equation.
         """
         return torch.cat([self.ic_residual_ns(u_flat), self.mass_residual_ns(u_flat)], dim=0)
+
+
+class Residuals3D:
+    """
+    Residuals for steady-state 3D Darcy flow: -div(K grad p) = 0 on the unit
+    cube, Dirichlet BC on the x=0/x=1 faces, no-flow (Neumann) elsewhere.
+    Unlike Residuals/Residuals2D (which enforce an IC + a *global* mass
+    conservation law over time), this is a pure spatial BVP: the constraint
+    set is a BC residual plus a *local* per-cell finite-volume flux-balance
+    residual, evaluated against a fixed, sample-specific permeability field k.
+    """
+    def __init__(self, k, p_left, p_right, x=None, y=None, z=None, dx=None, dy=None, dz=None, nx=None, ny=None, nz=None):
+        device = k.device
+        self.k = k
+        self.p_left = p_left
+        self.p_right = p_right
+        self.nx = nx if nx is not None else k.shape[0]
+        self.ny = ny if ny is not None else k.shape[1]
+        self.nz = nz if nz is not None else k.shape[2]
+        self.dx = (dx if dx is not None else (x[1] - x[0])).to(device) if dx is not None or x is not None else None
+        self.dy = (dy if dy is not None else (y[1] - y[0])).to(device) if dy is not None or y is not None else None
+        self.dz = (dz if dz is not None else (z[1] - z[0])).to(device) if dz is not None or z is not None else None
+        if self.dx is None:
+            self.dx = self.dy = self.dz = torch.tensor(1.0 / self.nx, device=device)
+
+    def pde_residual_darcy3d(self, p_flat):
+        """
+        Local finite-volume flux-balance residual: for every cell, the net
+        harmonic-averaged flux from its neighbors must vanish, with the
+        Dirichlet BC entering as a flux source term at the x=0/x=1 cells
+        (standard cell-centered FV treatment -- the boundary *face* value is
+        p_left/p_right, not the boundary *cell-center* value, which sits a
+        half-cell away). Zero at the true FV solution; alone this fully
+        determines p, so it doubles as the full residual for this dataset.
+        """
+        p = p_flat.view(self.nx, self.ny, self.nz)
+        k = self.k.to(p.device)
+        h = self.dx.to(p.device)
+
+        def harmonic(k1, k2):
+            return 2 * k1 * k2 / (k1 + k2)
+
+        R = torch.zeros_like(p)
+
+        Tx = harmonic(k[:-1], k[1:]) * h
+        diff_x = p[1:] - p[:-1]
+        R[:-1] = R[:-1] + Tx * diff_x
+        R[1:] = R[1:] - Tx * diff_x
+
+        Ty = harmonic(k[:, :-1], k[:, 1:]) * h
+        diff_y = p[:, 1:] - p[:, :-1]
+        R[:, :-1] = R[:, :-1] + Ty * diff_y
+        R[:, 1:] = R[:, 1:] - Ty * diff_y
+
+        Tz = harmonic(k[:, :, :-1], k[:, :, 1:]) * h
+        diff_z = p[:, :, 1:] - p[:, :, :-1]
+        R[:, :, :-1] = R[:, :, :-1] + Tz * diff_z
+        R[:, :, 1:] = R[:, :, 1:] - Tz * diff_z
+
+        Tw = 2 * k[0] * h
+        R[0] = R[0] + Tw * (self.p_left - p[0])
+        Te = 2 * k[-1] * h
+        R[-1] = R[-1] + Te * (self.p_right - p[-1])
+
+        return R.flatten()
+
+    def full_residual_darcy3d(self, p_flat):
+        """
+        Combined residual for 3D Darcy flow (alias for pde_residual_darcy3d,
+        kept for naming consistency with Residuals/Residuals2D's full_residual_*).
+        """
+        return self.pde_residual_darcy3d(p_flat)
