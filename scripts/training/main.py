@@ -3,6 +3,7 @@
 
 import argparse
 import os
+import re
 import time
 
 from tqdm import tqdm
@@ -60,7 +61,18 @@ if __name__ == '__main__':
             print('Resuming scheduler states...')
             scheduler.load_state_dict(ckpt['scheduler'])
         torch.cuda.empty_cache()
-    global_step = 0
+        global_step = ckpt.get('step')
+        if global_step is None:
+            # Older/numbered checkpoints (e.g. 24000.pt) don't carry a 'step'
+            # key -- fall back to parsing it from the filename so resuming
+            # doesn't silently restart the step counter (and start
+            # overwriting earlier 2000.pt/4000.pt/... checkpoints with the
+            # wrong step number in their name).
+            m = re.search(r'(\d+)\.pt$', os.path.basename(args.resume))
+            global_step = int(m.group(1)) if m else 0
+        print(f'Resuming from global_step={global_step}')
+    else:
+        global_step = 0
 
 
     def train():
@@ -97,6 +109,8 @@ if __name__ == '__main__':
                     model.train()
                     torch.save({
                         'model': model.state_dict(),
+                        'optimizer': optimizer.state_dict(),
+                        'scheduler': scheduler.state_dict(),
                         'step': global_step,
                     }, os.path.join(logdir, 'latest.pt'))
                     if global_step % config.train.save_freq == 0:
@@ -107,6 +121,7 @@ if __name__ == '__main__':
                             'optimizer': optimizer.state_dict(),
                             'scheduler': scheduler.state_dict(),
                             'avg_val_loss': avg_val_loss,
+                            'step': global_step,
                         }, ckpt_path)
                 if global_step >= config.train.max_iter:
                     return
