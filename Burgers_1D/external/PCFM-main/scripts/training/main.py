@@ -51,7 +51,7 @@ if __name__ == '__main__':
 
     if args.resume is not None:
         print(f'Resuming from checkpoint: {args.resume}')
-        ckpt = torch.load(args.resume, map_location=args.device)
+        ckpt = torch.load(args.resume, map_location=args.device, weights_only=False)
         model.load_state_dict(ckpt['model'])
         if 'optimizer' in ckpt:
             print('Resuming optimizer states...')
