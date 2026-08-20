@@ -168,7 +168,7 @@ def load_conditioned_checkpoint(path, n_t, device):
 
 
 @torch.no_grad()
-def vanilla_sample(model, cond_a, cond_f, n_t, H, W, w_scale, device, timesteps=50):
+def vanilla_sample(model, cond_a, cond_f, n_t, H, W, w_scale, device, timesteps=200):
     B = cond_a.shape[0]
     xt = torch.randn(B, n_t, H, W, device=device)
     dt = 1.0 / timesteps
@@ -180,7 +180,7 @@ def vanilla_sample(model, cond_a, cond_f, n_t, H, W, w_scale, device, timesteps=
 
 
 def pcfm_sample_with_physics(model, cond_a, cond_f, n_t, H, W, w_scale, residuals_list,
-                             device, timesteps=50, correction_steps=2):
+                             device, timesteps=200, correction_steps=1):
     """FiLM(IC,forcing) model + PCFM hard projection (IC+mass, Residuals2D).
 
     residuals_list: one Residuals2D per batch item (each built against its own
