@@ -186,18 +186,27 @@ def main():
                     w_scale=train_ds.w_scale, visc=CONFIG["visc"],
                     frame_dt=CONFIG["frame_dt"], use_dignorm=CONFIG["use_dignorm"],
                 )
-            v_total = v_data.item() + v_phys.item()
+            v_total = v_data.item()
+            # Select/early-stop on Data loss alone, not Data+Phys: an
+            # undertrained model with near-zero output amplitude trivially
+            # minimizes the physics residual (little dynamics = little to
+            # violate) without actually fitting the data, so including Phys
+            # in the selection criterion rewards that degenerate solution.
+            # Empirically confirmed on this run: the Sum-based "best"
+            # checkpoint (iter 1000) scored *worse* on every held-out metric
+            # (Data MSE, spectral Phys MSE, mass drift) than the iter-10000
+            # EMA weights via experiments/evaluate.py.
             if v_total < best_val_loss:
                 best_val_loss = v_total
                 patience_counter = 0
                 torch.save({"model": ema_model.state_dict(),
                             "w_scale": train_ds.w_scale}, out_ckpt)
                 print(f"   => [Val] Data {v_data.item():.4e} | Phys {v_phys.item():.4e} "
-                      f"| Sum {v_total:.4e} (saved)")
+                      f"(saved, best Data)")
             else:
                 patience_counter += 1
-                print(f"   => [Val] Sum {v_total:.4e} | best {best_val_loss:.4e} "
-                      f"| patience {patience_counter}/{CONFIG['patience']}")
+                print(f"   => [Val] Data {v_data.item():.4e} | Phys {v_phys.item():.4e} "
+                      f"| best Data {best_val_loss:.4e} | patience {patience_counter}/{CONFIG['patience']}")
 
             torch.save({
                 "model": model.state_dict(),
