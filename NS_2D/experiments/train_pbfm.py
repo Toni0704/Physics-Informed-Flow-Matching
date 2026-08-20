@@ -175,8 +175,14 @@ def main():
         if iteration % CONFIG["eval_every"] == 0:
             ema_model.eval()
             with torch.no_grad():
+                # Always evaluate at the full unroll length, not the current
+                # curriculum n_unroll -- otherwise the val loss gets harder
+                # over the course of training (curriculum ramps 1 -> 4) and
+                # "best" checkpoint selection / early stopping spuriously
+                # favors early, undertrained checkpoints evaluated under the
+                # easy n_unroll=1 regime.
                 v_data, v_phys = pbfm_loss(
-                    ema_model, vb_x1, vb_a, vb_f, n_steps=n_unroll,
+                    ema_model, vb_x1, vb_a, vb_f, n_steps=CONFIG["max_unroll_steps"],
                     w_scale=train_ds.w_scale, visc=CONFIG["visc"],
                     frame_dt=CONFIG["frame_dt"], use_dignorm=CONFIG["use_dignorm"],
                 )
