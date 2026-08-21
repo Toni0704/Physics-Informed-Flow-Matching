@@ -246,6 +246,20 @@ def load_ns_test_batch(data_path, num_samples, device):
     return w_gt, a, f, n_t, H, W
 
 
+def run_ground_truth(args, device):
+    """Sanity check, not a technique: evaluates the metrics on the true trajectory
+    against itself. Data MSE/IC MSE are trivially 0 (w_pred == w_gt); Phys MSE
+    (spectral residual) and Mass drift MSE are the meaningful numbers here -- they
+    check whether the *dataset itself* satisfies the PDE/mass-conservation to a
+    reasonable tolerance, independent of any trained model.
+    """
+    w_gt, a_gt, f_gt, n_t, H, W = load_ns_test_batch(args.data_test, args.num_samples, device)
+    w_gt_np = w_gt.cpu().numpy()
+    f_np = f_gt.cpu().numpy()
+    df = rich_metrics(w_gt_np, w_gt_np, f_np, device)
+    write_rich(df, "Ground truth (sanity check)", MET_DIR / "ground_truth.txt")
+
+
 def run_pure_pcfm(args, device):
     ckpt_path = Path(args.ckpt_uncond) if args.ckpt_uncond else WEIGHTS / "best_fm_uncond.pt"
     if not ckpt_path.exists():
@@ -342,7 +356,8 @@ def run_conditioned(args, device, which):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--technique", default="all",
-                   choices=["all", "pure_pcfm", "cond_pcfm", "cond_vanilla", "cond_pbfm"])
+                   choices=["all", "pure_pcfm", "cond_pcfm", "cond_vanilla", "cond_pbfm",
+                            "ground_truth"])
     p.add_argument("--num-samples", type=int, default=2)
     p.add_argument("--n-step", type=int, default=200,
                    help="Euler/PCFM sampling steps. Paper's Appendix H uses 200 for "
@@ -379,11 +394,13 @@ def main():
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     MET_DIR.mkdir(parents=True, exist_ok=True)
 
-    todo = (["pure_pcfm", "cond_pbfm", "cond_pcfm", "cond_vanilla"]
+    todo = (["ground_truth", "pure_pcfm", "cond_pbfm", "cond_pcfm", "cond_vanilla"]
             if args.technique == "all" else [args.technique])
     for t in todo:
         print(f"\n{'#'*70}\n# technique: {t}\n{'#'*70}")
-        if t == "pure_pcfm":
+        if t == "ground_truth":
+            run_ground_truth(args, device)
+        elif t == "pure_pcfm":
             run_pure_pcfm(args, device)
         else:
             run_conditioned(args, device, t)
