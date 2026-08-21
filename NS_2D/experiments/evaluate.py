@@ -383,6 +383,11 @@ def main():
                         "in a second terminal alongside training without competing for "
                         "GPU memory (the PCFM Jacobian alone is a few GB at this problem "
                         "size, on top of whatever the training process already holds)")
+    p.add_argument("--outdir", default=None,
+                   help="Where to write results/{metrics,figures}/ -- defaults to the repo "
+                        "checkout (NS_2D/results/), which does NOT persist across a fresh "
+                        "Kaggle session (only /kaggle/working does). Pass e.g. "
+                        "/kaggle/working/ns/eval to make results survive a session restart.")
     args = p.parse_args()
 
     if args.device == "cpu":
@@ -391,6 +396,11 @@ def main():
         device = torch.device("cuda")
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    global FIG_DIR, MET_DIR
+    if args.outdir:
+        FIG_DIR = Path(args.outdir) / "figures"
+        MET_DIR = Path(args.outdir) / "metrics"
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     MET_DIR.mkdir(parents=True, exist_ok=True)
 
