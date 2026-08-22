@@ -147,7 +147,7 @@ def vanilla_sample(model, cond_k, cond_bc, shape, device, timesteps=200):
     return xt[0]
 
 
-def pcfm_sample_with_physics(model, cond_k, cond_bc, residuals, shape, device,
+def pcfm_sample_with_physics(model, cond_k, cond_bc, residuals, norm, shape, device,
                               timesteps=200, correction_steps=1, mode="least_squares",
                               eps=1e-6):
     nx, ny, nz = shape
@@ -155,7 +155,12 @@ def pcfm_sample_with_physics(model, cond_k, cond_bc, residuals, shape, device,
     dt = 1.0 / timesteps
 
     def hfunc(u_flat_in):
-        return residuals.full_residual_darcy3d(u_flat_in.to(torch.float64)).to(torch.float32)
+        # u_flat_in is in the model's normalized [-1,1] space (see
+        # Darcy3DConditionedDataset), but full_residual_darcy3d was built
+        # against physical k/BCs and expects physical pressure units --
+        # must denormalize before computing the residual.
+        u_phys = denormalize(u_flat_in.view(nx, ny, nz), norm).flatten()
+        return residuals.full_residual_darcy3d(u_phys.to(torch.float64)).to(torch.float32)
 
     for i in range(timesteps):
         t_val = i / timesteps
@@ -196,7 +201,7 @@ def run_technique(which, model, norm, data_path, indices, device, args, outdir):
         elif which == "cond_pcfm":
             print(f"[{which}] idx {idx}: running PCFM-constrained sampling...")
             p_pred_norm = pcfm_sample_with_physics(
-                model, cond_k, cond_bc, residuals, (nx, ny, nz), device,
+                model, cond_k, cond_bc, residuals, norm, (nx, ny, nz), device,
                 timesteps=args.n_step, correction_steps=args.newtonsteps,
                 mode=args.mode, eps=args.eps)
         else:
