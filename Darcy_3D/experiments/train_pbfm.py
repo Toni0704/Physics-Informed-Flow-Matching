@@ -57,6 +57,13 @@ from conflictfree.utils import get_gradient_vector, apply_gradient_vector
 CONFIG = {
     "batch_size": 32,
     "num_iterations": 10000,
+    # Curriculum ramp length (1 -> max_unroll_steps), independent of
+    # num_iterations/--iters -- see NS_2D/experiments/train_pbfm.py for the
+    # full rationale (a run with --iters 60000 there early-stopped stuck at
+    # n_unroll=2, with real quality as bad as an undertrained n_unroll=1
+    # checkpoint, because patience exhausted before the curriculum -- tied
+    # to num_iterations at the time -- ever reached the productive stages).
+    "curriculum_iters": 10000,
     "lr": 3e-5,
     "ema_decay": 0.999,
     "eval_every": 1000,
@@ -83,11 +90,18 @@ def main():
     p.add_argument("--resume", default=None,
                    help="resume from a <out>.latest.pt written by a previous run")
     p.add_argument("--batch-size", type=int, default=None)
-    p.add_argument("--iters", type=int, default=None)
+    p.add_argument("--iters", type=int, default=None,
+                   help="overall training-budget cap; does NOT affect curriculum ramp "
+                        "speed, see --curriculum-iters")
+    p.add_argument("--curriculum-iters", type=int, default=None,
+                   help="iterations over which n_unroll ramps 1 -> max_unroll_steps, "
+                        "independent of --iters (default 10000)")
     args = p.parse_args()
 
     if args.batch_size:
         CONFIG["batch_size"] = args.batch_size
+    if args.curriculum_iters:
+        CONFIG["curriculum_iters"] = args.curriculum_iters
     if args.iters:
         CONFIG["num_iterations"] = args.iters
 
@@ -149,7 +163,7 @@ def main():
 
     model.train()
     for iteration in range(start_iter, CONFIG["num_iterations"] + 1):
-        n_unroll = curriculum_n_steps(iteration, CONFIG["num_iterations"],
+        n_unroll = curriculum_n_steps(iteration, CONFIG["curriculum_iters"],
                                       CONFIG["max_unroll_steps"])
 
         x1, cond_k, cond_bc, cond_bc_phys, k_phys = next(data_iter)

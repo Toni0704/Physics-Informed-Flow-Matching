@@ -46,6 +46,16 @@ from conflictfree.utils import get_gradient_vector, apply_gradient_vector
 CONFIG = {
     "batch_size": 4,
     "num_iterations": 10000,
+    # Curriculum ramp length (1 -> max_unroll_steps), independent of
+    # num_iterations/--iters. --iters is an overall training-budget CAP;
+    # tying the curriculum ramp to it (as a previous version of this script
+    # did) stretches the ramp for large --iters values, which can make
+    # early-stopping (patience) trigger before the model ever reaches the
+    # later curriculum stages where real quality actually improves --
+    # empirically confirmed: a run with --iters 60000 early-stopped at
+    # iteration 21000, stuck at n_unroll=2, with real Data MSE ~5.2 (as bad
+    # as the very first undertrained checkpoint) vs. a healthy run's ~2.5.
+    "curriculum_iters": 10000,
     "lr": 3e-5,
     "ema_decay": 0.999,
     "eval_every": 1000,
@@ -74,11 +84,18 @@ def main():
     p.add_argument("--resume", default=None,
                    help="resume from a <out>.latest.pt written by a previous run")
     p.add_argument("--batch-size", type=int, default=None)
-    p.add_argument("--iters", type=int, default=None)
+    p.add_argument("--iters", type=int, default=None,
+                   help="overall training-budget cap; does NOT affect curriculum ramp "
+                        "speed, see --curriculum-iters")
+    p.add_argument("--curriculum-iters", type=int, default=None,
+                   help="iterations over which n_unroll ramps 1 -> max_unroll_steps, "
+                        "independent of --iters (default 10000)")
     args = p.parse_args()
 
     if args.batch_size:
         CONFIG["batch_size"] = args.batch_size
+    if args.curriculum_iters:
+        CONFIG["curriculum_iters"] = args.curriculum_iters
     if args.iters:
         CONFIG["num_iterations"] = args.iters
 
@@ -134,7 +151,7 @@ def main():
 
     model.train()
     for iteration in range(start_iter, CONFIG["num_iterations"] + 1):
-        n_unroll = curriculum_n_steps(iteration, CONFIG["num_iterations"],
+        n_unroll = curriculum_n_steps(iteration, CONFIG["curriculum_iters"],
                                       CONFIG["max_unroll_steps"])
 
         x1, cond_a, cond_f = next(data_iter)
