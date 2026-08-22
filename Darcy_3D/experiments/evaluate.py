@@ -185,7 +185,11 @@ def run_technique(which, model, norm, data_path, indices, device, args, outdir):
         residuals = Residuals3D(k=k_phys, p_left=bc_phys[0].item(), p_right=bc_phys[1].item(),
                                 nx=nx, ny=ny, nz=nz)
 
-        if which == "cond_vanilla":
+        if which in ("cond_vanilla", "cond_pbfm"):
+            # PBFM enforces physics at TRAINING time (via the physics loss), not at
+            # sampling time -- so it uses the same plain deterministic Euler sampler
+            # as cond_vanilla, just with the PBFM-trained checkpoint loaded instead
+            # of the plain-FM one. Mirrors NS2D's evaluate.py convention.
             print(f"[{which}] idx {idx}: running vanilla Euler sampling...")
             p_pred_norm = vanilla_sample(model, cond_k, cond_bc, (nx, ny, nz), device,
                                          timesteps=args.n_step)
@@ -221,7 +225,8 @@ def run_technique(which, model, norm, data_path, indices, device, args, outdir):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--technique", default="all", choices=["all", "cond_vanilla", "cond_pcfm"])
+    p.add_argument("--technique", default="all",
+                   choices=["all", "cond_vanilla", "cond_pcfm", "cond_pbfm"])
     p.add_argument("--ckpt", required=True, help="best_fm_conditioned.pt")
     p.add_argument("--data", required=True)
     p.add_argument("--num_samples", type=int, default=20)
