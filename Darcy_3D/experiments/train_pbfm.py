@@ -96,12 +96,19 @@ def main():
     p.add_argument("--curriculum-iters", type=int, default=None,
                    help="iterations over which n_unroll ramps 1 -> max_unroll_steps, "
                         "independent of --iters (default 10000)")
+    p.add_argument("--patience", type=int, default=None,
+                   help="early-stopping patience in eval_every-iteration units (default 20). "
+                        "See NS_2D/experiments/train_pbfm.py for the rationale -- the internal "
+                        "'best Data' criterion doesn't reliably track real generative-sampling "
+                        "quality, so patience=20 can stop well before real quality peaks.")
     args = p.parse_args()
 
     if args.batch_size:
         CONFIG["batch_size"] = args.batch_size
     if args.curriculum_iters:
         CONFIG["curriculum_iters"] = args.curriculum_iters
+    if args.patience:
+        CONFIG["patience"] = args.patience
     if args.iters:
         CONFIG["num_iterations"] = args.iters
 

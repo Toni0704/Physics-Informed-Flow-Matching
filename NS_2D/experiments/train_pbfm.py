@@ -90,12 +90,23 @@ def main():
     p.add_argument("--curriculum-iters", type=int, default=None,
                    help="iterations over which n_unroll ramps 1 -> max_unroll_steps, "
                         "independent of --iters (default 10000)")
+    p.add_argument("--patience", type=int, default=None,
+                   help="early-stopping patience in eval_every-iteration units (default 20). "
+                        "The 'best Data' criterion is a one-step FM regression loss on a fixed "
+                        "val batch, NOT the real generative-sampling quality evaluate.py "
+                        "measures -- it can plateau/stay noisy for a long time even while real "
+                        "quality keeps improving (confirmed empirically), so patience=20 can "
+                        "stop training well before real quality peaks. Consider a much larger "
+                        "value and independently checking .latest.pt's EMA weights with "
+                        "evaluate.py rather than trusting best_pbfm.pt alone.")
     args = p.parse_args()
 
     if args.batch_size:
         CONFIG["batch_size"] = args.batch_size
     if args.curriculum_iters:
         CONFIG["curriculum_iters"] = args.curriculum_iters
+    if args.patience:
+        CONFIG["patience"] = args.patience
     if args.iters:
         CONFIG["num_iterations"] = args.iters
 
