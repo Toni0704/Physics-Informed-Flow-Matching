@@ -229,16 +229,23 @@ def pcfm_sample_with_physics(model, cond_a, cond_f, n_t, H, W, w_scale, residual
 # --------------------------------------------------------------------------- #
 # Technique runners
 # --------------------------------------------------------------------------- #
-def load_ns_test_batch(data_path, num_samples, device):
+def load_ns_test_batch(data_path, num_samples, device, sample_indices=None):
     """`num_samples` (IC, forcing) pairs spanning BOTH axes of the test .h5,
     physical units. Same pick pattern as check_physics.py -- pinning forcing
     to index 0 would never exercise the forcing-FiLM branch of the
-    conditioned models and would cap num_samples at nw."""
+    conditioned models and would cap num_samples at nw.
+
+    sample_indices: optional explicit list of `i` values (same indexing as
+    the default range(num_samples)) -- for targeting specific samples (e.g.
+    reproducing a known-divergent one) without regenerating every preceding
+    sample too.
+    """
     with h5py.File(data_path, "r") as fh:
         nw, nf = fh["u"].shape[:2]
         n_t = fh["u"].shape[-1]
         H, W = fh["u"].shape[2], fh["u"].shape[3]
-        pairs = [(i % nw, (i * 7) % nf) for i in range(num_samples)]
+        indices = sample_indices if sample_indices is not None else range(num_samples)
+        pairs = [(i % nw, (i * 7) % nf) for i in indices]
         w_gt = torch.stack([torch.from_numpy(fh["u"][i, j]) for i, j in pairs]
                            ).permute(0, 3, 1, 2).to(device)          # (B,T,H,W)
         a = torch.stack([torch.from_numpy(fh["a"][i]) for i, j in pairs]).to(device)  # (B,H,W)
