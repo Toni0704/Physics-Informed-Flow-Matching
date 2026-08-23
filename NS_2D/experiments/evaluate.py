@@ -179,51 +179,51 @@ def vanilla_sample(model, cond_a, cond_f, n_t, H, W, w_scale, device, timesteps=
     return xt * w_scale
 
 
-def pcfm_sample_with_physics(model, cond_a, cond_f, n_t, H, W, w_scale, residuals_list,
-                             device, timesteps=200, correction_steps=1):
-    """FiLM(IC,forcing) model + PCFM hard projection (IC+mass, Residuals2D).
+def pcfm_sample_with_physics_one(model, cond_a_1, cond_f_1, n_t, H, W, w_scale, residual,
+                                 device, timesteps=200, correction_steps=1):
+    """FiLM(IC,forcing) model + PCFM hard projection (IC+mass, Residuals2D), single sample
+    (B=1). cond_a_1/cond_f_1 are already sliced to one sample; residual is that sample's
+    own Residuals2D (built against its own GT IC, since the projection target is
+    per-sample).
 
-    residuals_list: one Residuals2D per batch item (each built against its own
-    GT IC, since the projection target is per-sample). pcfm_2d_batched takes
-    unflattened (B, nx, ny, nt) tensors and a SINGLE shared hfunc for its whole
-    batch loop, so -- to give each sample its own hfunc -- it's called once per
-    sample (B=1) rather than once for the whole batch.
+    One full 200-step trajectory completes and returns before the caller starts the next
+    sample -- deliberately NOT batched across samples within one call (an earlier batched
+    version interleaved all N samples' per-timestep Newton solves inside one Python call,
+    so nothing was ever eligible for GC between samples, which OOM'd partway through a
+    N=20 run; this per-sample structure mirrors run_pure_pcfm's, which is proven to run
+    cleanly at N=20).
     """
-    B = cond_a.shape[0]
-    xt = torch.randn(B, n_t, H, W, device=device)
+    xt = torch.randn(1, n_t, H, W, device=device)
     dt = 1.0 / timesteps
+
+    def hfunc_single(u_flat_in):
+        u_phys = (u_flat_in * w_scale).to(torch.float64)
+        return residual.full_residual_ns(u_phys).to(torch.float32)
 
     for i in range(timesteps):
         t_val = i / timesteps
-        t = torch.full((B,), t_val, device=device)
+        t = torch.full((1,), t_val, device=device)
         with torch.no_grad():
-            vf = model(xt, t, cond_a, cond_f)
+            vf = model(xt, t, cond_a_1, cond_f_1)
 
-        # (B, n_t, H, W) -> pcfm_2d_batched / Residuals2D convention (B, nx, ny, nt).
+        # (1, n_t, H, W) -> pcfm_2d_batched / Residuals2D convention (1, nx, ny, nt).
         # pcfm_2d_batched does a plain .view() internally, which requires
         # contiguous memory -- permute() alone leaves a non-contiguous view.
         ut_hwt = xt.permute(0, 2, 3, 1).contiguous()
         vf_hwt = vf.permute(0, 2, 3, 1).contiguous()
 
-        proj_list = []
-        for b in range(B):
-            def hfunc_single(u_flat_in, _res=residuals_list[b], _ws=w_scale):
-                u_phys = (u_flat_in * _ws).to(torch.float64)
-                return _res.full_residual_ns(u_phys).to(torch.float32)
+        with torch.enable_grad():
+            proj_v = pcfm_2d_batched(
+                ut=ut_hwt, vf=vf_hwt,
+                t=torch.tensor(t_val, device=device), u0=ut_hwt, dt=dt,
+                hfunc=hfunc_single, mode="least_squares",
+                newtonsteps=correction_steps, guided_interpolation=False,
+            )
 
-            with torch.enable_grad():
-                proj_v = pcfm_2d_batched(
-                    ut=ut_hwt[b:b + 1], vf=vf_hwt[b:b + 1],
-                    t=torch.tensor(t_val, device=device), u0=ut_hwt[b:b + 1], dt=dt,
-                    hfunc=hfunc_single, mode="least_squares",
-                    newtonsteps=correction_steps, guided_interpolation=False,
-                )
-            proj_list.append(proj_v[0])
-
-        vf_corrected = torch.stack(proj_list, dim=0).permute(0, 3, 1, 2)  # -> (B, n_t, H, W)
+        vf_corrected = proj_v.permute(0, 3, 1, 2)  # -> (1, n_t, H, W)
         xt = xt + vf_corrected * dt
 
-    return xt * w_scale
+    return xt[0] * w_scale
 
 
 # --------------------------------------------------------------------------- #
@@ -341,13 +341,18 @@ def run_conditioned(args, device, which):
         x_grid = torch.linspace(0, 1.0, H, device=device)
         y_grid = torch.linspace(0, 1.0, W, device=device)
         t_grid = torch.linspace(0, 1.0, n_t, device=device)
-        residuals_list = [
-            Residuals2D(data=w_gt[i].permute(1, 2, 0).unsqueeze(0), x=x_grid, y=y_grid,
-                       t_grid=t_grid, nx=H, ny=W, nt=n_t)
-            for i in range(args.num_samples)
-        ]
-        w_pred = pcfm_sample_with_physics(model, cond_a, cond_f, n_t, H, W, w_scale,
-                                          residuals_list, device, timesteps=args.n_step)
+        w_pred_list = []
+        for i in range(args.num_samples):
+            residual = Residuals2D(data=w_gt[i].permute(1, 2, 0).unsqueeze(0), x=x_grid,
+                                   y=y_grid, t_grid=t_grid, nx=H, ny=W, nt=n_t)
+            w_pred_i = pcfm_sample_with_physics_one(
+                model, cond_a[i:i + 1], cond_f[i:i + 1], n_t, H, W, w_scale, residual,
+                device, timesteps=args.n_step)
+            w_pred_list.append(w_pred_i)
+            del residual, w_pred_i
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
+        w_pred = torch.stack(w_pred_list, dim=0)
         title, stem = "FiLM(IC,forcing) + PCFM sampling", "conditioned_pcfm"
     else:
         raise ValueError(which)
