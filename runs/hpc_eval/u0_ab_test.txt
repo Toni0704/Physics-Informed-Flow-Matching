@@ -1,0 +1,10 @@
+
+===== SHIPPED  (u0 = current state) =====
+ Sample     Data MSE  Data NRMSE (%)  Phys MSE (spectral)       IC MSE  Mass drift MSE
+      1 26720.074219       4012.4507         1.367572e+08 5.342942e-15    2.184884e-10
+      2 26782.824219       4110.9358         6.832502e+07 4.267884e-15    2.104026e-10
+
+===== FIXED    (u0 = noise seed) =====
+ Sample  Data MSE  Data NRMSE (%)  Phys MSE (spectral)       IC MSE  Mass drift MSE
+      1 13.034928         88.6227         12742.874128 1.162108e-15    1.425095e-10
+      2 13.969629         93.8869         12507.950956 1.370666e-15    1.435678e-10

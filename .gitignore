@@ -95,6 +95,8 @@ target/
 profile_default/
 ipython_config.py
 
+*ns_data/
+*.pt
 # pyenv
 #   For a library or package, you might want to ignore these files since the code is
 #   intended to run in multiple environments; otherwise, check them in:
@@ -219,3 +221,25 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 *.DS_Store
+# Personal project briefing notes (not for the team repo)
+PROJECT_OVERVIEW.md
+
+# Secondary venv: neuralop 0.3.0, needed to load the uncond NS checkpoint
+.venv_neuralop030/
+
+# ---------------------------------------------------------------------------
+# NS2D HPC run (2026-08-30) -- large local artifacts, intentionally untracked
+# ---------------------------------------------------------------------------
+# Datasets: the NS2D test split (821MB) and the regenerated train split (2.0GB).
+# Both are reproducible -- see runs/hpc_eval/README.md for the exact generator
+# command (seed 42 reproduces them bit-exactly).
+ns_data/
+datasets/data/
+
+# Model checkpoints supplied by the team (248MB total), untracked like all *.pt
+NS_2D/*.pt
+NS_2D/weights/*.pt
+
+# Keep the PCFM debug trace: it is the deliverable for the pure_pcfm divergence
+# investigation, not incidental log noise (*.log above would otherwise drop it).
+!runs/hpc_eval/debug_guards/pcfm_debug_trace.log
