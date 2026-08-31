@@ -184,6 +184,7 @@ def pcfm_sample(
 
     ut1 = u_flat + (1.0 - t) * v_flat
     u_corr = ut1.clone()
+    guard_tripped = False
 
     if _DEBUG_GUARDS:
         print(f"[pcfm_sample TRACE] t={float(t):.3f}  "
@@ -241,6 +242,7 @@ def pcfm_sample(
                 print(f"[pcfm_sample] MAGNITUDE guard tripped @ t={float(t):.3f}: "
                       f"new_norm={new_norm:.3e} vs 50*ref_scale={50*ref_scale:.3e} "
                       f"(ref_scale={ref_scale:.3e}); reverting this Newton step")
+            guard_tripped = True
             break
         new_res_norm = hfunc(u_new).norm().item()
         if not math.isfinite(new_res_norm) or new_res_norm > res_norm * 10 + 1e-6:
@@ -248,8 +250,22 @@ def pcfm_sample(
                 print(f"[pcfm_sample] RESIDUAL guard tripped @ t={float(t):.3f}: "
                       f"res_norm {res_norm:.3e} -> {new_res_norm:.3e}; "
                       f"reverting this Newton step")
+            guard_tripped = True
             break
         u_corr = u_new
+
+    # A guard trip means every candidate u_corr this step -- including the
+    # very first, pre-Newton ut1 -- failed the sanity check (u_corr only
+    # reaches u_new, replacing ut1, once a step has already passed both
+    # guards above). Falling through to the interpolation below with
+    # u_corr left at that unprojected, unvetted ut1 doesn't "revert" anything:
+    # near t=1 the interpolation weights u_corr almost fully (see ut_interp
+    # below), so an exploding ut1 still reaches the trajectory -- this is
+    # why guard trips were previously observed to produce zero actual saves.
+    # Fall back to the plain, unprojected vanilla step instead: skip both the
+    # projection and the u0-blended interpolation entirely for this timestep.
+    if guard_tripped:
+        return v_flat.detach()
 
     # --------------------------------------------------
     # interpolation

@@ -196,9 +196,20 @@ def pcfm_sample_with_physics_one(model, cond_a_1, cond_f_1, n_t, H, W, w_scale, 
     xt = torch.randn(1, n_t, H, W, device=device)
     dt = 1.0 / timesteps
 
+    # Fixed original noise seed -- pcfm_2d_batched's u0 must be this, not the
+    # running state, for both the final-step interpolation and the guard's
+    # ref_scale (see HPC handoff Finding 2: passing the running state here
+    # caused a ~2000x Data MSE inflation, confirmed by A/B test). Mirrors
+    # FFM_NS_sampler.pcfm_sample, which clones u0 once before its loop.
+    u0_hwt = xt.permute(0, 2, 3, 1).contiguous()
+
     def hfunc_single(u_flat_in):
-        u_phys = (u_flat_in * w_scale).to(torch.float64)
-        return residual.full_residual_ns(u_phys).to(torch.float32)
+        # float32 throughout (HPC handoff Finding 1): the float64 cast this
+        # used to do doubles the Jacobian's peak VRAM (3.40 GB -> 6.80 GB)
+        # for no numerical benefit -- full_residual_ns has no dtype
+        # requirement and run_pure_pcfm's hfunc already runs in float32.
+        u_phys = u_flat_in * w_scale
+        return residual.full_residual_ns(u_phys)
 
     for i in range(timesteps):
         t_val = i / timesteps
@@ -215,7 +226,7 @@ def pcfm_sample_with_physics_one(model, cond_a_1, cond_f_1, n_t, H, W, w_scale, 
         with torch.enable_grad():
             proj_v = pcfm_2d_batched(
                 ut=ut_hwt, vf=vf_hwt,
-                t=torch.tensor(t_val, device=device), u0=ut_hwt, dt=dt,
+                t=torch.tensor(t_val, device=device), u0=u0_hwt, dt=dt,
                 hfunc=hfunc_single, mode="least_squares",
                 newtonsteps=correction_steps, guided_interpolation=False,
             )
