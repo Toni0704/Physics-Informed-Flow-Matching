@@ -242,4 +242,4 @@ NS_2D/weights/*.pt
 
 # Keep the PCFM debug trace: it is the deliverable for the pure_pcfm divergence
 # investigation, not incidental log noise (*.log above would otherwise drop it).
-!runs/hpc_eval/debug_guards/pcfm_debug_trace.log
+!runs/*/debug_guards/pcfm_debug_trace.log
